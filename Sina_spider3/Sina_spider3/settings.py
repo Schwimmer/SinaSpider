@@ -11,7 +11,7 @@ SPIDER_MODULES = ['Sina_spider3.spiders']
 NEWSPIDER_MODULE = 'Sina_spider3.spiders'
 
 DOWNLOADER_MIDDLEWARES = {
-    "Sina_spider3.middleware.UserAgentMiddleware": 401,
+    "Sina_spider3.middleware.UserAgentMiddleware": None,
     "Sina_spider3.middleware.CookiesMiddleware": 402,
 }
 ITEM_PIPELINES = {
@@ -39,3 +39,5 @@ CONCURRENT_REQUESTS = 1  # 默认为16
 # CONCURRENT_ITEMS = 1
 # CONCURRENT_REQUESTS_PER_IP = 1
 REDIRECT_ENABLED = False
+COOKIES_ENABLED = True
+COOKIES_DEBUG = True

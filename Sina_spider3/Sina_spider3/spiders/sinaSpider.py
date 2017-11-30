@@ -26,29 +26,40 @@ class Spider(RedisSpider):
     host = "https://weibo.cn"
     redis_key = "SinaSpider:start_urls"
     start_urls = list(set(weiboID))
-    logging.getLogger("requests").setLevel(logging.WARNING)  # 将requests的日志级别设成WARNING
+    # for test
+    # start_urls = "https://weibo.cn/1636369723/info"
+    # logging.getLogger("requests").setLevel(logging.WARNING)  # 将requests的日志级别设成WARNING
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.WARNING)
 
     def start_requests(self):
+        # for test
+        # return [Request(self.start_urls, callback=self.parse_information)]
         for uid in self.start_urls:
-            yield Request(url="https://weibo.cn/%s/info" % uid, callback=self.parse_information)
+           yield Request(url="https://weibo.cn/%s/info" % uid, callback=self.parse_information)
 
     def parse_information(self, response):
+        self.logger.warning("aaa")
         """ 抓取个人信息 """
         informationItem = InformationItem()
         selector = Selector(response)
         ID = re.findall('(\d+)/info', response.url)[0]
         try:
             text1 = ";".join(selector.xpath('body/div[@class="c"]//text()').extract())  # 获取标签里的所有text()
-            nickname = re.findall('昵称[：:]?(.*?);'.decode('utf8'), text1)
-            gender = re.findall('性别[：:]?(.*?);'.decode('utf8'), text1)
-            place = re.findall('地区[：:]?(.*?);'.decode('utf8'), text1)
-            briefIntroduction = re.findall('简介[：:]?(.*?);'.decode('utf8'), text1)
-            birthday = re.findall('生日[：:]?(.*?);'.decode('utf8'), text1)
-            sexOrientation = re.findall('性取向[：:]?(.*?);'.decode('utf8'), text1)
-            sentiment = re.findall('感情状况[：:]?(.*?);'.decode('utf8'), text1)
-            vipLevel = re.findall('会员等级[：:]?(.*?);'.decode('utf8'), text1)
-            authentication = re.findall('认证[：:]?(.*?);'.decode('utf8'), text1)
-            url = re.findall('互联网[：:]?(.*?);'.decode('utf8'), text1)
+            self.logger.warning(text1)
+            nickname = re.findall('昵称;?[：:]?(.*?);'.decode('utf8'), text1)
+            self.logger.warning(nickname)
+            gender = re.findall('性别;?[：:]?(.*?);'.decode('utf8'), text1)
+            self.logger.warning(gender)
+            place = re.findall('地区;?[：:]?(.*?);'.decode('utf8'), text1)
+            briefIntroduction = re.findall('简介;?[：:]?(.*?);'.decode('utf8'), text1)
+            birthday = re.findall('生日;?[：:]?(.*?);'.decode('utf8'), text1)
+            sexOrientation = re.findall('性取向;?[：:]?(.*?);'.decode('utf8'), text1)
+            sentiment = re.findall('感情状况;?[：:]?(.*?);'.decode('utf8'), text1)
+            vipLevel = re.findall('会员等级;?[：:]?(.*?);'.decode('utf8'), text1)
+            authentication = re.findall('认证;?[：:]?(.*?);'.decode('utf8'), text1)
+            url = re.findall('互联网;?[：:]?(.*?);'.decode('utf8'), text1)
+            self.logger.warning(url)
 
             informationItem["_id"] = ID
             if nickname and nickname[0]:
@@ -65,7 +76,9 @@ class Spider(RedisSpider):
             if birthday and birthday[0]:
                 try:
                     birthday = datetime.datetime.strptime(birthday[0], "%Y-%m-%d")
-                    informationItem["Birthday"] = birthday - datetime.timedelta(hours=8)
+                    # 为何需要减8小时
+                    # informationItem["Birthday"] = birthday - datetime.timedelta(hours=8)
+                    informationItem["Birthday"] = birthday
                 except Exception:
                     informationItem['Birthday'] = birthday[0]   # 有可能是星座，而非时间
             if sexOrientation and sexOrientation[0]:
@@ -82,11 +95,32 @@ class Spider(RedisSpider):
             if url:
                 informationItem["URL"] = url[0]
 
+            """ 获取标签 """
+            # tagurl = self.host + selector.xpath('body/div[@class="c"]/a[text()="更多>>"]/@href'.decode('utf8')).extract()
+            # self.logger.warning(tagurl)
+            try:
+                tagurl = "https://weibo.cn/account/privacy/tags/?uid=%s&st=f856d8" % ID
+                self.logger.warning(tagurl)
+                r = requests.get(tagurl, cookies=response.request.cookies, timeout=10)
+                if r.status_code == 200:
+                    self.logger.warning("bbb")
+                    selector = etree.HTML(r.content)
+                    self.logger.warning(selector)
+                    texts = ";".join(selector.xpath('//body//div[@class="c"]/a//text()'))
+                    self.logger.warning(texts)
+                    if texts:
+                        tags = re.findall( '资料;?(.*?);皮肤'.decode('utf8'), texts )
+                        if tags:
+                            informationItem["TAGS"] = tags
+            except Exception, e:
+                pass
+
             try:
                 urlothers = "https://weibo.cn/attgroup/opening?uid=%s" % ID
                 r = requests.get(urlothers, cookies=response.request.cookies, timeout=5)
                 if r.status_code == 200:
                     selector = etree.HTML(r.content)
+                    self.logger.warning("urlothers " + selector)
                     texts = ";".join(selector.xpath('//body//div[@class="tip2"]/a//text()'))
                     if texts:
                         num_tweets = re.findall('微博\[(\d+)\]'.decode('utf8'), texts)
@@ -104,7 +138,8 @@ class Spider(RedisSpider):
             pass
         else:
             yield informationItem
-        yield Request(url="https://weibo.cn/%s/profile?filter=1&page=1" % ID, callback=self.parse_tweets, dont_filter=True)
+        # 暂时不爬取博文
+        # yield Request(url="https://weibo.cn/%s/profile?filter=1&page=1" % ID, callback=self.parse_tweets, dont_filter=True)
         yield Request(url="https://weibo.cn/%s/follow" % ID, callback=self.parse_relationship, dont_filter=True)
         yield Request(url="https://weibo.cn/%s/fans" % ID, callback=self.parse_relationship, dont_filter=True)
 
@@ -160,10 +195,11 @@ class Spider(RedisSpider):
         else:
             ID = re.findall('(\d+)/fans', response.url)[0]
             flag = False
-        urls = selector.xpath('//a[text()="关注他" or text()="关注她"]/@href'.decode('utf')).extract()
+        urls = selector.xpath('//a[text()="关注他" or text()="关注她" or text()="移除" or text()="取消关注"]/@href'.decode('utf')).extract()
         uids = re.findall('uid=(\d+)', ";".join(urls), re.S)
         for uid in uids:
             relationshipsItem = RelationshipsItem()
+            #Host1关注了Host2
             relationshipsItem["Host1"] = ID if flag else uid
             relationshipsItem["Host2"] = uid if flag else ID
             yield relationshipsItem

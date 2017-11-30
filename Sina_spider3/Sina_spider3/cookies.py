@@ -14,6 +14,8 @@ from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 import logging
 from yumdama import identify
+from user_agents import agents
+import random
 
 IDENTIFY = 1  # 验证码输入方式:        1:看截图aa.png，手动输入     2:云打码
 COOKIE_GETWAY = 0 # 0 代表从https://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18) 获取cookie   # 1 代表从https://weibo.cn/login/获取Cookie
@@ -29,7 +31,7 @@ logging.getLogger("selenium").setLevel(logging.WARNING)  # 将selenium的日志�
     建议买几十个，实际生产建议100+，微博反爬得厉害，太频繁了会出现302转移。
 """
 myWeiBo = [
-    ('13467408430', 'aogan571'),
+    ('xuyin.nnu@gmail.com', '320981DANG'),
 ]
 
 
@@ -43,55 +45,61 @@ def getCookie(account, password):
 
 def get_cookie_from_login_sina_com_cn(account, password):
     """ 获取一个账号的Cookie """
-    loginURL = "https://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)"
+    loginURL = "https://passport.weibo.cn/sso/login"
     username = base64.b64encode(account.encode("utf-8")).decode("utf-8")
-    postData = {
-        "entry": "sso",
-        "gateway": "1",
-        "from": "null",
-        "savestate": "30",
-        "useticket": "0",
-        "pagerefer": "",
-        "vsnf": "1",
-        "su": username,
-        "service": "sso",
-        "sp": password,
-        "sr": "1440*900",
-        "encoding": "UTF-8",
-        "cdult": "3",
-        "domain": "sina.com.cn",
-        "prelt": "0",
-        "returntype": "TEXT",
+    headers = {
+        'User_Agent': random.choice(agents),
+        'Referer': 'https://passport.weibo.cn/signin/login?entry=mweibo&res=wel&wm=3349&r=http%3A%2F%2Fm.weibo.cn%2F',
+        'Origin': 'https://passport.weibo.cn',
+        'Host': 'passport.weibo.cn'
     }
+    post_data = {
+        'username': '',
+        'password': '',
+        'savestate': '1',
+        'ec': '0',
+        'pagerefer': 'https://passport.weibo.cn/signin/welcome?entry=mweibo&r=http%3A%2F%2Fm.weibo.cn%2F&wm=3349&vt=4',
+        'entry': 'mweibo'
+    }
+    post_data['username'] = 'xuyin.nnu@gmail.com'
+    post_data['password'] = '320981DANG'
     session = requests.Session()
-    r = session.post(loginURL, data=postData)
+    r = session.post(loginURL, data=post_data, headers=headers)
+    logger.warning(r)
     jsonStr = r.content.decode("gbk")
     info = json.loads(jsonStr)
-    if info["retcode"] == "0":
+    logger.warning(info["retcode"])
+    if info["retcode"] == 20000000:
         logger.warning("Get Cookie Success!( Account:%s )" % account)
         cookie = session.cookies.get_dict()
         return json.dumps(cookie)
     else:
-        logger.warning("Failed!( Reason:%s )" % info["reason"])
+        logger.warning("Failed!( Reason:%s )" % info["msg"])
         return ""
 
 
 def get_cookie_from_weibo_cn(account, password):
+    logger.warning("get_cookie_from_weibo_cn")
     """ 获取一个账号的Cookie """
     try:
         browser = webdriver.PhantomJS(desired_capabilities=dcap)
         browser.get("https://weibo.cn/login/")
         time.sleep(1)
-
         failure = 0
         while "微博" in browser.title and failure < 5:
+            
             failure += 1
             browser.save_screenshot("aa.png")
+            logger.warning(browser.title)
             username = browser.find_element_by_name("mobile")
+            logger.warning(username)
+            logger.warning(account)
             username.clear()
             username.send_keys(account)
 
             psd = browser.find_element_by_xpath('//input[@type="password"]')
+            logger.warning(psd)
+            logger.warning(password)
             psd.clear()
             psd.send_keys(password)
             try:
@@ -127,7 +135,7 @@ def get_cookie_from_weibo_cn(account, password):
             logger.warning("Get Cookie Success!( Account:%s )" % account)
         return json.dumps(cookie)
     except Exception, e:
-        logger.warning("Failed %s!" % account)
+        logger.warning("Failed %s!" % e)
         return ""
     finally:
         try:
@@ -137,6 +145,7 @@ def get_cookie_from_weibo_cn(account, password):
 
 
 def initCookie(rconn, spiderName):
+    logger.warning("initCookie")
     """ 获取所有账号的Cookies，存入Redis。如果Redis已有该账号的Cookie，则不再获取。 """
     for weibo in myWeiBo:
         if rconn.get("%s:Cookies:%s--%s" % (spiderName, weibo[0], weibo[1])) is None:  # 'SinaSpider:Cookies:账号--密码'，为None即不存在。
