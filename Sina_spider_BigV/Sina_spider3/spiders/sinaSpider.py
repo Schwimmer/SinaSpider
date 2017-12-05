@@ -22,9 +22,9 @@ sys.setdefaultencoding('utf8')
 
 
 class Spider(RedisSpider):
-    name = "SinaSpider"
+    name = "SinaBigV"
     host = "https://weibo.cn"
-    redis_key = "SinaSpider:start_urls"
+    redis_key = "SinaBigV:start_urls"
     start_urls = list(set(weiboID))
     # for test
     # start_urls = "https://weibo.cn/1636369723/info"
@@ -39,7 +39,6 @@ class Spider(RedisSpider):
            yield Request(url="https://weibo.cn/%s/info" % uid, callback=self.parse_information)
 
     def parse_information(self, response):
-        self.logger.warning("aaa")
         """ 抓取个人信息 """
         informationItem = InformationItem()
         selector = Selector(response)
